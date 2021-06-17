@@ -97,7 +97,7 @@ ISR(PCINT0_vect) {
   if (UART_RX_isLow()) {                        // interrupt caused by start bit ?
     uint8_t byte;                               // byte to be received
     __builtin_avr_delay_cycles((UART_BC/2)-27); // wait for first bit
-		for (uint8_t i=8; i; i--) {                 // receive 8 Bits
+    for (uint8_t i=8; i; i--) {                 // receive 8 Bits
       byte >>= 1;                               // LSB first
       __builtin_avr_delay_cycles(UART_BC - 10); // wait for next bit
       if (UART_RX_isHigh()) byte |= 0x80;       // read bit
