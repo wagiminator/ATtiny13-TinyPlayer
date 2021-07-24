@@ -278,6 +278,11 @@ Insert the SD card into the corresponding slot of the DFPlayer Mini module.
 ## Operating the TinyDFPlayer
 The device is switched on with the power switch. All functions can be controlled via the IR remote. To charge the battery, connect a 5V power supply via the USB-C port.
 
+## Power Consumption
+TinyPlayer consumes an average of 50mA at 3.7V at medium volume and a connected 4Ohm/3W speaker. A 300mAh battery enables a playing time of about 6 hours.
+
+![current.png](https://raw.githubusercontent.com/wagiminator/ATtiny13-TinyPlayer/main/documentation/TinyPlayer_current.png)
+
 # References, Links and Notes
 1. [ATtiny13A datasheet](http://ww1.microchip.com/downloads/en/DeviceDoc/doc8126.pdf)
 2. [DFPLayer Mini datasheet](https://wiki.dfrobot.com/DFPlayer_Mini_SKU_DFR0299)
