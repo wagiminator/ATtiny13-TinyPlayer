@@ -1,6 +1,7 @@
 # TinyPlayer - MP3-Player based on ATtiny13A and DFPlayerMini
 TinyPlayer is an IR remote controlled and LiPo battery powered MP3 player based on ATtiny13A and DFPlayerMini module. The DFPlayer module is controlled via a simple cycle-precise software implementation of the UART protocol (8N1, 9600 BAUD) in half-duplex mode. The volume last set as well as the track number last played are saved in the EEPROM and automatically loaded the next time it is started. TinyPlayer has a built-in battery charging circuit, which is supplied with power via a USB-C connector. You can directly connect a 3.7V LiPo battery and a 3W/4Ohm speaker to the board.
 
+- Project Video (Youtube): https://youtu.be/XRpFHvouraQ
 - Design Files (EasyEDA): https://easyeda.com/wagiminator/attiny13-tinyplayer
 
 ![pic1.jpg](https://raw.githubusercontent.com/wagiminator/ATtiny13-TinyPlayer/main/documentation/TinyPlayer_pic1.jpg)
@@ -292,7 +293,7 @@ TinyPlayer consumes an average of 50mA at 3.7V at medium volume and a connected 
 6. [TinyRemote](https://github.com/wagiminator/ATtiny13-TinyRemote)
 7. [TinyDFPlayer based on ATtiny85](https://github.com/wagiminator/ATtiny85-TinyDFPlayer)
 
-![pic7.jpg](https://raw.githubusercontent.com/wagiminator/ATtiny13-TinyPlayer/main/documentation/TinyPlayer_pic7.jpg)
+![pic8.jpg](https://raw.githubusercontent.com/wagiminator/ATtiny13-TinyPlayer/main/documentation/TinyPlayer_pic8.jpg)
 
 # License
 ![license.png](https://i.creativecommons.org/l/by-sa/3.0/88x31.png)
