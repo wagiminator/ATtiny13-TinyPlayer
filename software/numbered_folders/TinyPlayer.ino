@@ -1,5 +1,15 @@
-// TinyPlayer - multi-folder version
+// ===================================================================================
+// Project:   TinyPlayer - MP3 Player based on ATtiny13A (multi-folder version)
+// Version:   v1.0
+// Year:      2021
+// Author:    Stefan Wagner
+// Github:    https://github.com/wagiminator
+// EasyEDA:   https://easyeda.com/wagiminator
+// License:   http://creativecommons.org/licenses/by-sa/3.0/
+// ===================================================================================
 //
+// Description:
+// ------------
 // TinyPlayer is an IR remote controllable MP3 player based on ATtiny13A
 // and DFPlayerMini module. The DFPlayer module is controlled via a
 // simple cycle-precise software implementation of the UART protocol
@@ -21,13 +31,17 @@
 // to the SD card. Under MacOS you can try to clean up with the following
 // command: dot_clean /Volumes/SD-Card
 //
-//                               +-\/-+
-//             --- A0 (D5) PB5  1|°   |8  Vcc
-// DFPLAYER RX --- A3 (D3) PB3  2|    |7  PB2 (D2) A1 --- DFPLAYER TX
-// IR RECEIVER --- A2 (D4) PB4  3|    |6  PB1 (D1) ------
-//                         GND  4|    |5  PB0 (D0) ------
-//                               +----+
+// Wiring:
+// -------
+//                                +-\/-+
+//             --- RST ADC0 PB5  1|°   |8  Vcc
+// DFPLAYER RX ------- ADC3 PB3  2|    |7  PB2 ADC1 -------- DFPLAYER TX
+// IR RECEIVER ------- ADC2 PB4  3|    |6  PB1 AIN1 OC0B --- 
+//                          GND  4|    |5  PB0 AIN0 OC0A --- 
+//                                +----+
 //
+// Compilation Settings:
+// ---------------------
 // Controller:  ATtiny13A
 // Core:        MicroCore (https://github.com/MCUdude/MicroCore)
 // Clockspeed:  1.2 MHz internal
@@ -41,26 +55,26 @@
 // Note: The internal oscillator may need to be calibrated for the device
 //       to function properly.
 //
-// 2021 by Stefan Wagner 
-// Project Files (EasyEDA): https://easyeda.com/wagiminator
-// Project Files (Github):  https://github.com/wagiminator
-// License: http://creativecommons.org/licenses/by-sa/3.0/
+// Fuse settings: -U lfuse:w:0x2a:m -U hfuse:w:0xff:m
 
+
+// ===================================================================================
+// Libraries and Definitions
+// ===================================================================================
 
 // Oscillator calibration value (uncomment and set if necessary)
 //#define OSCCAL_VAL  0x53
 
 // Libraries
-#include <avr/io.h>
-#include <avr/power.h>
-#include <avr/eeprom.h>
-#include <avr/interrupt.h>
-#include <util/delay.h>
+#include <avr/io.h>           // for GPIO
+#include <avr/eeprom.h>       // to store data in EEPROM
+#include <avr/interrupt.h>    // for interrupts
+#include <util/delay.h>       // for delays
 
 // Pins
-#define TX_PIN        2       // TX pin for DFPlayer
-#define RX_PIN        3       // RX pin for DFPlayer
-#define IR_PIN        4       // Pin for IR receiver
+#define TX_PIN        PB2     // TX pin for DFPlayer
+#define RX_PIN        PB3     // RX pin for DFPlayer
+#define IR_PIN        PB4     // Pin for IR receiver
 
 // IR codes
 #define IR_ADDR       0x1A    // IR device address
@@ -73,9 +87,9 @@
 #define IR_PAUSE      0x05    // IR Code for toggle pause/play
 #define IR_FAIL       0xFF    // IR fail code
 
-// -----------------------------------------------------------------------------
+// ===================================================================================
 // UART Implementation (9600 BAUD, 8N1, Half-Duplex)
-// -----------------------------------------------------------------------------
+// ===================================================================================
 //
 // ------+     +-----+     +-----+-----+           +-----+     +-----+----- HIGH
 //       |     |     |     |           |           |     |     |
@@ -117,8 +131,8 @@ void UART_write(uint8_t byte) {
   cli();                                        // disable interrupts
   UART_TX_setLow();                             // transmit start bit
   __builtin_avr_delay_cycles(UART_BC - 6);      // wait till end of start bit
-  for (uint8_t i=8; i; i--, byte>>=1) {         // 8 bits, LSB first
-    if (byte & (0x01))  { asm("nop"); UART_TX_setHigh(); }      // "1" - bit
+  for(uint8_t i=8; i; i--, byte>>=1) {          // 8 bits, LSB first
+    if(byte & (0x01))  { asm("nop"); UART_TX_setHigh(); }      // "1" - bit
     else                { UART_TX_setLow(); asm("rjmp .+0"); }  // "0" - bit
     __builtin_avr_delay_cycles(UART_BC - 11);   // wait till end of bit
   }
@@ -130,22 +144,22 @@ void UART_write(uint8_t byte) {
 
 // UART receive byte (pin change interrupt service routine)
 ISR(PCINT0_vect) {
-  if (UART_RX_isLow()) {                        // interrupt caused by start bit ?
+  if(UART_RX_isLow()) {                         // interrupt caused by start bit ?
     uint8_t byte;                               // byte to be received
     __builtin_avr_delay_cycles((UART_BC/2)-27); // wait for first bit
-    for (uint8_t i=8; i; i--) {                 // receive 8 Bits
+    for(uint8_t i=8; i; i--) {                  // receive 8 Bits
       byte >>= 1;                               // LSB first
       __builtin_avr_delay_cycles(UART_BC - 10); // wait for next bit
-      if (UART_RX_isHigh()) byte |= 0x80;       // read bit
+      if(UART_RX_isHigh()) byte |= 0x80;        // read bit
     }
     UART_RX_BUF[UART_RX_PTR++] = byte;          // write byte to buffer
-    if (UART_RX_PTR > 10) UART_RX_PTR = 10;     // limit pointer (not a ring buffer)
+    if(UART_RX_PTR > 10) UART_RX_PTR = 10;      // limit pointer (not a ring buffer)
   }
 }
 
-// -----------------------------------------------------------------------------
+// ===================================================================================
 // DFPlayer Implementation
-// -----------------------------------------------------------------------------
+// ===================================================================================
 //
 // Instruction Frame (Command String):
 // - Start Byte         0x7E
@@ -161,41 +175,41 @@ ISR(PCINT0_vect) {
 // Length seems to be always 0x06. Feedback seems to be always 10 bytes in total.
 
 // DFPlayer control commands (it's almost complete; only a few of them are used)
-#define DFP_CMD_NEXT      0x01                  // play next file
-#define DFP_CMD_PREV      0x02                  // play previous file
-#define DFP_CMD_TRACK     0x03                  // play track (fileNumber)
-#define DFP_CMD_VOLUP     0x04                  // volume up
-#define DFP_CMD_VOLDOWN   0x05                  // volume down
-#define DFP_CMD_VOL       0x06                  // set volume (0..30)
-#define DFP_CMD_EQ        0x07                  // set equalizer
-#define DFP_CMD_MODE      0x08                  // 0:repeat; 1:folder; 2:single; 3:random
-#define DDP_CMD_OUTPUT    0x09                  // set output device
-#define DFP_CMD_STBY      0x0A                  // enter standby
-#define DFP_CMD_NORM      0x0B                  // normal working
-#define DFP_CMD_RESET     0x0C                  // reset module
-#define DFP_CMD_PLAY      0x0D                  // play
-#define DFP_CMD_PAUSE     0x0E                  // pause
-#define DFP_CMD_FOLDER    0x0F                  // play folder (folderNumber, fileNumber)
-#define DFP_CMD_SETTING   0x10                  // output setting (enable, gain)
-#define DFP_CMD_REPEAT    0x11                  // loop all (0:stop; 1:start)
-#define DFP_CMD_MP3FOLD   0x12                  // play mp3-folder (fileNumber)
-#define DFP_CMD_ADVERT    0x13                  // play advertise (fileNumber)
-#define DFP_CMD_STOPADV   0x15                  // stop advertise
-#define DFP_CMD_STOP      0x16                  // stop
-#define DFP_CMD_LOOPFOLD  0x17                  // loop folder (folderNumber)
-#define DFP_CMD_RANDOM    0x18                  // random all
-#define DFP_CMD_LOOP      0x19                  // loop (0:enable; 1:disable)
-#define DFP_CMD_DAC       0x1A                  // DAC (0:enable; 1:disable)
+#define DFP_CMD_NEXT      0x01      // play next file
+#define DFP_CMD_PREV      0x02      // play previous file
+#define DFP_CMD_TRACK     0x03      // play track (fileNumber)
+#define DFP_CMD_VOLUP     0x04      // volume up
+#define DFP_CMD_VOLDOWN   0x05      // volume down
+#define DFP_CMD_VOL       0x06      // set volume (0..30)
+#define DFP_CMD_EQ        0x07      // set equalizer
+#define DFP_CMD_MODE      0x08      // 0:repeat; 1:folder; 2:single; 3:random
+#define DDP_CMD_OUTPUT    0x09      // set output device
+#define DFP_CMD_STBY      0x0A      // enter standby
+#define DFP_CMD_NORM      0x0B      // normal working
+#define DFP_CMD_RESET     0x0C      // reset module
+#define DFP_CMD_PLAY      0x0D      // play
+#define DFP_CMD_PAUSE     0x0E      // pause
+#define DFP_CMD_FOLDER    0x0F      // play folder (folderNumber, fileNumber)
+#define DFP_CMD_SETTING   0x10      // output setting (enable, gain)
+#define DFP_CMD_REPEAT    0x11      // loop all (0:stop; 1:start)
+#define DFP_CMD_MP3FOLD   0x12      // play mp3-folder (fileNumber)
+#define DFP_CMD_ADVERT    0x13      // play advertise (fileNumber)
+#define DFP_CMD_STOPADV   0x15      // stop advertise
+#define DFP_CMD_STOP      0x16      // stop
+#define DFP_CMD_LOOPFOLD  0x17      // loop folder (folderNumber)
+#define DFP_CMD_RANDOM    0x18      // random all
+#define DFP_CMD_LOOP      0x19      // loop (0:enable; 1:disable)
+#define DFP_CMD_DAC       0x1A      // DAC (0:enable; 1:disable)
 
 // DFPlayer query commands
-#define DFP_QRY_STATE     0x42                  // query current status
-#define DFP_QRY_VOL       0x43                  // query current volume
-#define DFP_QRY_EQ        0x44                  // query current equalizer setting
-#define DFP_QRY_MODE      0x45                  // query current playback mode
-#define DFP_QRY_TRACKS    0x48                  // query total number of files
-#define DFP_QRY_TRACK     0x4C                  // query current file number
-#define DFP_QRY_FTRACKS   0x4E                  // query total files in (folderNumber)
-#define DFP_QRY_FOLDERS   0x4F                  // query total number of folders
+#define DFP_QRY_STATE     0x42      // query current status
+#define DFP_QRY_VOL       0x43      // query current volume
+#define DFP_QRY_EQ        0x44      // query current equalizer setting
+#define DFP_QRY_MODE      0x45      // query current playback mode
+#define DFP_QRY_TRACKS    0x48      // query total number of files
+#define DFP_QRY_TRACK     0x4C      // query current file number
+#define DFP_QRY_FTRACKS   0x4E      // query total files in (folderNumber)
+#define DFP_QRY_FOLDERS   0x4F      // query total number of folders
 
 // DFPlayer macros
 #define DFP_setVolume(x)    DFP_command(DFP_CMD_VOL, x)       // set volume
@@ -234,12 +248,12 @@ uint16_t DFP_query(uint8_t cmd, uint8_t data) {
   DFP_command(cmd, data);
   while(UART_RX_PTR < 10);                      // wait for reply
   UART_RX_PTR = 0;                              // reset receive buffer pointer
-  return (((uint16_t)UART_RX_BUF[5] << 8) | UART_RX_BUF[6]);  // return query reply
+  return(((uint16_t)UART_RX_BUF[5] << 8) | UART_RX_BUF[6]);  // return query reply
 }
 
-// -----------------------------------------------------------------------------
+// ===================================================================================
 // IR Receiver Implementation (NEC Protocol)
-// -----------------------------------------------------------------------------
+// ===================================================================================
 //
 // ------+              +----------+       +-------+       +----------+     HIGH
 //       |              |          |       |       |       |          |
@@ -271,8 +285,8 @@ uint16_t DFP_query(uint8_t cmd, uint8_t data) {
 uint8_t IR_waitChange(uint8_t timeout) {
   uint8_t pinState = PINB & (1<<IR_PIN);        // get current signal state
   uint8_t dur = 0;                              // variable for measuring duration
-  while ((PINB & (1<<IR_PIN)) == pinState) {    // measure length of signal
-    if (dur++ > timeout) return 0;              // exit if timeout
+  while((PINB & (1<<IR_PIN)) == pinState) {     // measure length of signal
+    if(dur++ > timeout) return 0;               // exit if timeout
     __builtin_avr_delay_cycles(IR_100us - 13);  // count every 100us
   }
   return dur;                                   // return time in 100us
@@ -282,12 +296,12 @@ uint8_t IR_waitChange(uint8_t timeout) {
 uint8_t IR_readByte(void) {
   uint8_t result;
   uint8_t dur;
-  for (uint8_t i=8; i; i--) {                   // 8 bits
+  for(uint8_t i=8; i; i--) {                    // 8 bits
     result >>= 1;                               // LSB first
-    if (IR_waitChange(11) < 3) return IR_FAIL;  // exit if wrong burst length
+    if(IR_waitChange(11) < 3) return IR_FAIL;   // exit if wrong burst length
     dur = IR_waitChange(21);                    // measure length of pause
-    if (dur <  3) return IR_FAIL;               // exit if wrong pause length
-    if (dur > 11) result |= 0x80;               // bit "0" or "1" depends on pause duration
+    if(dur <  3) return IR_FAIL;                // exit if wrong pause length
+    if(dur > 11) result |= 0x80;                // bit "0" or "1" depends on pause duration
   }
   return result;                                // return received byte
 }
@@ -295,26 +309,26 @@ uint8_t IR_readByte(void) {
 // IR read data according to NEC protocol
 uint8_t IR_read(void) {
   uint16_t addr;                                // variable for received address
-  if (!IR_available())        return IR_FAIL;   // exit if no signal
-  if (!IR_waitChange(100))    return IR_FAIL;   // exit if wrong start burst length
-  if (IR_waitChange(55) < 35) return IR_FAIL;   // exit if wrong start pause length
+  if(!IR_available())        return IR_FAIL;    // exit if no signal
+  if(!IR_waitChange(100))    return IR_FAIL;    // exit if wrong start burst length
+  if(IR_waitChange(55) < 35) return IR_FAIL;    // exit if wrong start pause length
 
   uint8_t addr1 = IR_readByte();                // get first  address byte
   uint8_t addr2 = IR_readByte();                // get second address byte
   uint8_t cmd1  = IR_readByte();                // get first  command byte
   uint8_t cmd2  = IR_readByte();                // get second command byte
 
-  if (IR_waitChange(11) < 3)  return IR_FAIL;   // exit if wrong final burst length
-  if ((cmd1 + cmd2) < 255)    return IR_FAIL;   // exit if command bytes are not inverse
-  if ((addr1 + addr2) == 255) addr = addr1;     // check if it's extended NEC-protocol ...
+  if(IR_waitChange(11) < 3)  return IR_FAIL;    // exit if wrong final burst length
+  if((cmd1 + cmd2) < 255)    return IR_FAIL;    // exit if command bytes are not inverse
+  if((addr1 + addr2) == 255) addr = addr1;      // check if it's extended NEC-protocol ...
   else addr = ((uint16_t)addr2 << 8) | addr1;   // ... and get the correct address
-  if (addr != IR_ADDR)        return IR_FAIL;   // wrong address
+  if(addr != IR_ADDR)        return IR_FAIL;    // wrong address
   return cmd1;                                  // return command code
 }
 
-// -----------------------------------------------------------------------------
+// ===================================================================================
 // Main Function
-// -----------------------------------------------------------------------------
+// ===================================================================================
 
 int main(void) {
   // Set oscillator calibration value
@@ -361,20 +375,20 @@ int main(void) {
     // Check and parse IR signal
     if(IR_available()) {
       uint8_t command = IR_read();      
-      switch (command) {
-        case IR_VOL_P:    if (volume < 30) DFP_setVolume(++volume); break;
-        case IR_VOL_M:    if (volume) DFP_setVolume(--volume); break;
-        case IR_TRK_P:    if (++file > files) file = 1;
+      switch(command) {
+        case IR_VOL_P:    if(volume < 30) DFP_setVolume(++volume); break;
+        case IR_VOL_M:    if(volume) DFP_setVolume(--volume); break;
+        case IR_TRK_P:    if(++file > files) file = 1;
                           DFP_playFolder(folder, file); break;
-        case IR_TRK_M:    if (--file == 0) file = files;
+        case IR_TRK_M:    if(--file == 0) file = files;
                           DFP_playFolder(folder, file); break;
-        case IR_FOL_P:    if (++folder > folders) folder = 1;
+        case IR_FOL_P:    if(++folder > folders) folder = 1;
                           file = 1; DFP_playFolder(folder, file);                         
                           _delay_ms(100); files = DFP_getFiles(); break;
-        case IR_FOL_M:    if (--folder == 0) folder = folders;
+        case IR_FOL_M:    if(--folder == 0) folder = folders;
                           file = 1; DFP_playFolder(folder, file);
                           _delay_ms(100); files = DFP_getFiles(); break;                          
-        case IR_PAUSE:    if (playstate) DFP_play();
+        case IR_PAUSE:    if(playstate) DFP_play();
                           else           DFP_pause();
                           playstate = !playstate; break;
         default:          break;
@@ -385,12 +399,12 @@ int main(void) {
     }
 
     // Check and parse DFPlayer message via UART
-    if (UART_RX_PTR == 10) {                      // complete message received ?
-      UART_RX_PTR = 0;                            // reset receive buffer pointer
-      if (UART_RX_BUF[3] == 0x3D) {               // if last track finished
-        if (++file > files) file = 1;             // calculate next track
-        DFP_playFolder(folder, file);             // play next track
-        eeprom_update_byte((uint8_t*)2, file);    // update EEPROM (file)
+    if(UART_RX_PTR == 10) {                      // complete message received ?
+      UART_RX_PTR = 0;                           // reset receive buffer pointer
+      if(UART_RX_BUF[3] == 0x3D) {               // if last track finished
+        if(++file > files) file = 1;             // calculate next track
+        DFP_playFolder(folder, file);            // play next track
+        eeprom_update_byte((uint8_t*)2, file);   // update EEPROM (file)
       }  
     }
   }
